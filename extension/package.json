@@ -1,0 +1,12 @@
+{
+  "name": "aseprite-ai-mcp",
+  "displayName": "AI MCP Bridge",
+  "description": "Let an MCP assistant inspect and edit pixel art in the live editor.",
+  "version": "0.1.0",
+  "author": { "name": "Aseprite AI Bridge contributors" },
+  "contributors": [],
+  "publisher": "local",
+  "license": "MIT",
+  "categories": ["Scripts"],
+  "contributes": { "scripts": [{ "path": "bridge.lua" }] }
+}
