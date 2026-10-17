@@ -76,25 +76,44 @@ handlers.add_frame = function(p)
   return inspect()
 end
 
-handlers.draw_pixels = function(p)
+local function findLayerAny(layers, id)
+  for _, layer in ipairs(layers) do
+    if layer.id == id then return layer end
+    if layer.isGroup then
+      local found = findLayerAny(layer.layers, id)
+      if found then return found end
+    end
+  end
+end
+
+local function parseColor(c)
+  assert(type(c) == "string" and #c == 9 and c:match("^#%x%x%x%x%x%x%x%x$"),
+    "Colors must be #RRGGBBAA")
+  local a = tonumber(c:sub(8,9),16)
+  if a == 0 then return 0 end
+  return app.pixelColor.rgba(
+    tonumber(c:sub(2,3),16), tonumber(c:sub(4,5),16),
+    tonumber(c:sub(6,7),16), a)
+end
+
+local function normalizePixel(v)
+  if app.pixelColor.rgbaA(v) == 0 then return 0 end
+  return v
+end
+
+local function formatColor(v)
+  local pc = app.pixelColor
+  local a = pc.rgbaA(v)
+  if a == 0 then return "#00000000" end
+  return string.format("#%02x%02x%02x%02x", pc.rgbaR(v), pc.rgbaG(v), pc.rgbaB(v), a)
+end
+
+local function editCel(p, label, mutate)
   local sprite = active(p)
   integer(p.frame, 1, #sprite.frames, "frame")
   local layer = findLayer(sprite.layers, p.layer_id, true)
   assert(layer and not layer.isGroup and not layer.isTilemap and not layer.isReference
     and not layer.isBackground, "Choose a normal transparent image layer")
-  assert(p.pixels and #p.pixels >= 1 and #p.pixels <= 16384, "Invalid pixel batch size")
-  -- Validate everything before mutating the document.
-  local pixels = {}
-  for _, pixel in ipairs(p.pixels) do
-    integer(pixel.x, 0, sprite.width-1, "pixel x")
-    integer(pixel.y, 0, sprite.height-1, "pixel y")
-    assert(type(pixel.color) == "string" and #pixel.color == 9
-      and pixel.color:match("^#%x%x%x%x%x%x%x%x$"), "Colors must be #RRGGBBAA")
-    local c = pixel.color
-    pixels[#pixels+1] = {x=pixel.x, y=pixel.y, color=app.pixelColor.rgba(
-      tonumber(c:sub(2,3),16), tonumber(c:sub(4,5),16),
-      tonumber(c:sub(6,7),16), tonumber(c:sub(8,9),16))}
-  end
   local cel = layer:cel(p.frame)
   if cel then
     for _, other in ipairs(sprite.cels) do
@@ -112,8 +131,8 @@ handlers.draw_pixels = function(p)
   assert(right-left <= 2048 and bottom-top <= 2048, "Cel bounds are too large")
   local image = Image(right-left, bottom-top, ColorMode.RGB)
   if cel then image:drawImage(cel.image, Point(cel.position.x-left, cel.position.y-top)) end
-  for _, pixel in ipairs(pixels) do image:drawPixel(pixel.x-left, pixel.y-top, pixel.color) end
-  app.transaction("AI: draw pixels", function()
+  local changed = mutate(image, left, top, sprite)
+  app.transaction(label, function()
     if cel then
       cel.image = image
       cel.position = Point(left, top)
@@ -121,7 +140,165 @@ handlers.draw_pixels = function(p)
       sprite:newCel(layer, p.frame, image, Point(left, top))
     end
   end)
-  return {changed=#pixels, sprite_id=sprite.id, layer_id=layer.id, frame=p.frame}
+  return {changed=changed, sprite_id=sprite.id, layer_id=layer.id, frame=p.frame}
+end
+
+handlers.draw_pixels = function(p)
+  local sprite = active(p)
+  assert(p.pixels and #p.pixels >= 1 and #p.pixels <= 16384, "Invalid pixel batch size")
+  local pixels = {}
+  for _, pixel in ipairs(p.pixels) do
+    integer(pixel.x, 0, sprite.width-1, "pixel x")
+    integer(pixel.y, 0, sprite.height-1, "pixel y")
+    pixels[#pixels+1] = {x=pixel.x, y=pixel.y, color=parseColor(pixel.color)}
+  end
+  return editCel(p, "AI: draw pixels", function(image, left, top)
+    for _, pixel in ipairs(pixels) do
+      image:drawPixel(pixel.x-left, pixel.y-top, pixel.color)
+    end
+    return #pixels
+  end)
+end
+
+handlers.fill_rect = function(p)
+  local sprite = active(p)
+  local rx = integer(p.x, 0, sprite.width-1, "x")
+  local ry = integer(p.y, 0, sprite.height-1, "y")
+  local rw = integer(p.width, 1, sprite.width - rx, "width")
+  local rh = integer(p.height, 1, sprite.height - ry, "height")
+  local color = parseColor(p.color)
+  return editCel(p, "AI: fill rect", function(image, left, top)
+    for y = ry, ry + rh - 1 do
+      for x = rx, rx + rw - 1 do
+        image:drawPixel(x - left, y - top, color)
+      end
+    end
+    return rw * rh
+  end)
+end
+
+handlers.draw_line = function(p)
+  local sprite = active(p)
+  local x0 = integer(p.x0, 0, sprite.width-1, "x0")
+  local y0 = integer(p.y0, 0, sprite.height-1, "y0")
+  local x1 = integer(p.x1, 0, sprite.width-1, "x1")
+  local y1 = integer(p.y1, 0, sprite.height-1, "y1")
+  local color = parseColor(p.color)
+  return editCel(p, "AI: draw line", function(image, left, top)
+    local dx, sx = math.abs(x1 - x0), x0 < x1 and 1 or -1
+    local dy, sy = -math.abs(y1 - y0), y0 < y1 and 1 or -1
+    local err, count = dx + dy, 0
+    while true do
+      image:drawPixel(x0 - left, y0 - top, color)
+      count = count + 1
+      if x0 == x1 and y0 == y1 then break end
+      local e2 = 2 * err
+      if e2 >= dy then err = err + dy; x0 = x0 + sx end
+      if e2 <= dx then err = err + dx; y0 = y0 + sy end
+    end
+    return count
+  end)
+end
+
+handlers.flood_fill = function(p)
+  local sprite = active(p)
+  local sx = integer(p.x, 0, sprite.width-1, "x")
+  local sy = integer(p.y, 0, sprite.height-1, "y")
+  local color = parseColor(p.color)
+  return editCel(p, "AI: flood fill", function(image, left, top)
+    local target = normalizePixel(image:getPixel(sx - left, sy - top))
+    if target == color then return 0 end
+    local w, h = sprite.width, sprite.height
+    local visited = {}
+    local qx, qy = {sx}, {sy}
+    visited[sy * w + sx] = true
+    local head, tail = 1, 1
+    while head <= tail do
+      local x, y = qx[head], qy[head]
+      head = head + 1
+      image:drawPixel(x - left, y - top, color)
+      local neighbors = {{x-1,y}, {x+1,y}, {x,y-1}, {x,y+1}}
+      for i = 1, 4 do
+        local nx, ny = neighbors[i][1], neighbors[i][2]
+        if nx >= 0 and nx < w and ny >= 0 and ny < h then
+          local key = ny * w + nx
+          if not visited[key] and normalizePixel(image:getPixel(nx - left, ny - top)) == target then
+            visited[key] = true
+            tail = tail + 1
+            qx[tail], qy[tail] = nx, ny
+          end
+        end
+      end
+    end
+    return tail
+  end)
+end
+
+handlers.replace_color = function(p)
+  local fromColor = parseColor(p.from_color)
+  local toColor = parseColor(p.to_color)
+  return editCel(p, "AI: replace color", function(image, left, top, sprite)
+    if fromColor == toColor then return 0 end
+    local count = 0
+    for y = 0, sprite.height - 1 do
+      for x = 0, sprite.width - 1 do
+        if normalizePixel(image:getPixel(x - left, y - top)) == fromColor then
+          image:drawPixel(x - left, y - top, toColor)
+          count = count + 1
+        end
+      end
+    end
+    return count
+  end)
+end
+
+handlers.sample_pixels = function(p)
+  local sprite = active(p)
+  local frame = integer(p.frame or 1, 1, #sprite.frames, "frame")
+  local x0 = integer(p.x or 0, 0, sprite.width-1, "x")
+  local y0 = integer(p.y or 0, 0, sprite.height-1, "y")
+  local w = integer(p.width or (sprite.width - x0), 1, sprite.width - x0, "width")
+  local h = integer(p.height or (sprite.height - y0), 1, sprite.height - y0, "height")
+  local image = Image(sprite.spec)
+  if p.layer_id and p.layer_id ~= 0 then
+    local layer = findLayerAny(sprite.layers, p.layer_id)
+    assert(layer and not layer.isGroup, "Choose an image layer to sample")
+    local cel = layer:cel(frame)
+    if cel then image:drawImage(cel.image, cel.position) end
+  else
+    image:drawSprite(sprite, frame)
+  end
+  local counts, order, pixels = {}, {}, {}
+  local includeAll = (w * h <= 64)
+  for y = y0, y0 + h - 1 do
+    for x = x0, x0 + w - 1 do
+      local v = normalizePixel(image:getPixel(x, y))
+      local hex = formatColor(v)
+      if v ~= 0 then
+        if not counts[hex] then
+          counts[hex] = 0
+          order[#order+1] = hex
+        end
+        counts[hex] = counts[hex] + 1
+      end
+      if (v ~= 0 or includeAll) and #pixels < 4096 then
+        pixels[#pixels+1] = {x=x, y=y, color=hex}
+      end
+    end
+  end
+  table.sort(order, function(a, b)
+    if counts[a] ~= counts[b] then return counts[a] > counts[b] end
+    return a < b
+  end)
+  local palette = {}
+  for _, hex in ipairs(order) do
+    palette[#palette+1] = {color=hex, count=counts[hex]}
+  end
+  return {
+    sprite_id=sprite.id, frame=frame, layer_id=p.layer_id or 0,
+    region={x=x0, y=y0, width=w, height=h},
+    palette=palette, pixels=pixels
+  }
 end
 
 handlers.preview = function(p)
@@ -174,6 +351,13 @@ local function connect(port, token)
         if not decoded then status("Invalid message from server"); return end
         if request.type == "ready" then status("Connected"); return end
         local ok, result = pcall(function()
+          if not handlers[request.op] then
+            local path = app.fs.joinPath(app.fs.userConfigPath, "extensions", "aseprite-ai-mcp", "bridge.lua")
+            if app.fs.isFile(path) then
+              local reloaded = dofile(path)
+              if reloaded and reloaded.handlers then handlers = reloaded.handlers end
+            end
+          end
           assert(handlers[request.op], "Unknown operation")
           return handlers[request.op](request.params)
         end)

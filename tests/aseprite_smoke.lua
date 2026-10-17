@@ -50,6 +50,26 @@ local frames = call("add_frame", {sprite_id=sprite.id})
 assert(frames.frames == 2)
 app.undo()
 assert(#sprite.frames == 1)
+
+-- Test fill_rect, draw_line, flood_fill, replace_color, and sample_pixels
+local rect_res = call("fill_rect", {sprite_id=sprite.id, layer_id=layer.id, frame=1,
+  x=6, y=6, width=4, height=4, color="#112233ff"})
+assert(rect_res.changed == 16)
+assert(cel.image:getPixel(6,6) == app.pixelColor.rgba(0x11,0x22,0x33,0xff))
+local line_res = call("draw_line", {sprite_id=sprite.id, layer_id=layer.id, frame=1,
+  x0=0, y0=15, x1=3, y1=15, color="#abcdefcc"})
+assert(line_res.changed == 4)
+local fill_res = call("flood_fill", {sprite_id=sprite.id, layer_id=layer.id, frame=1,
+  x=7, y=7, color="#445566ff"})
+assert(fill_res.changed == 16)
+assert(cel.image:getPixel(8,8) == app.pixelColor.rgba(0x44,0x55,0x66,0xff))
+local repl_res = call("replace_color", {sprite_id=sprite.id, layer_id=layer.id, frame=1,
+  from_color="#445566ff", to_color="#778899ff"})
+assert(repl_res.changed == 16)
+local sampled = call("sample_pixels", {sprite_id=sprite.id, frame=1, layer_id=layer.id,
+  x=6, y=6, width=4, height=4})
+assert(#sampled.palette == 1 and sampled.palette[1].color == "#778899ff" and sampled.palette[1].count == 16)
+
 local other = Sprite(2,2)
 rejects("draw_pixels", params, "Active sprite changed")
 other:close()

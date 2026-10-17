@@ -95,6 +95,11 @@ Available tools:
 | `create_sprite` | New transparent RGB sprite |
 | `add_layer` | Named layer, with undo |
 | `draw_pixels` | Batch of exact RGBA pixels, with undo |
+| `fill_rect` | Fill a rectangular region with `#RRGGBBAA`, with undo |
+| `draw_line` | Draw a 1px Bresenham line between two points, with undo |
+| `flood_fill` | 4-connected bucket fill from `(x, y)`, with undo |
+| `replace_color` | Swap all occurrences of a `#RRGGBBAA` color on a layer/frame, with undo |
+| `sample_pixels` | Read exact `#RRGGBBAA` pixel colors and palette counts from a region/layer |
 | `add_frame` | Append a copy of the last frame, with undo |
 | `preview_sprite` | Composited PNG returned as an MCP image |
 

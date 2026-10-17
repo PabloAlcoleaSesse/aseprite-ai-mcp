@@ -156,6 +156,122 @@ async def draw_pixels(sprite_id: int, layer_id: int, frame: int, pixels: list[Pi
 
 
 @mcp.tool()
+async def fill_rect(
+    sprite_id: int,
+    layer_id: int,
+    frame: int,
+    x: int = Field(ge=0, le=511),
+    y: int = Field(ge=0, le=511),
+    width: int = Field(ge=1, le=512),
+    height: int = Field(ge=1, le=512),
+    color: str = Field(pattern=r"^#[0-9a-fA-F]{8}$", description="#RRGGBBAA, including alpha"),
+) -> dict:
+    """Fill a rectangular region with #RRGGBBAA color as one undoable edit (#00000000 erases)."""
+    return await bridge.call(
+        "fill_rect",
+        sprite_id=sprite_id,
+        layer_id=layer_id,
+        frame=frame,
+        x=x,
+        y=y,
+        width=width,
+        height=height,
+        color=color,
+    )
+
+
+@mcp.tool()
+async def draw_line(
+    sprite_id: int,
+    layer_id: int,
+    frame: int,
+    x0: int = Field(ge=0, le=511),
+    y0: int = Field(ge=0, le=511),
+    x1: int = Field(ge=0, le=511),
+    y1: int = Field(ge=0, le=511),
+    color: str = Field(pattern=r"^#[0-9a-fA-F]{8}$", description="#RRGGBBAA, including alpha"),
+) -> dict:
+    """Draw a 1px pixel-art Bresenham line from (x0, y0) to (x1, y1) as one undoable edit."""
+    return await bridge.call(
+        "draw_line",
+        sprite_id=sprite_id,
+        layer_id=layer_id,
+        frame=frame,
+        x0=x0,
+        y0=y0,
+        x1=x1,
+        y1=y1,
+        color=color,
+    )
+
+
+@mcp.tool()
+async def flood_fill(
+    sprite_id: int,
+    layer_id: int,
+    frame: int,
+    x: int = Field(ge=0, le=511),
+    y: int = Field(ge=0, le=511),
+    color: str = Field(pattern=r"^#[0-9a-fA-F]{8}$", description="#RRGGBBAA, including alpha"),
+) -> dict:
+    """4-connected bucket flood fill starting at (x, y) on the layer/frame as one undoable edit."""
+    return await bridge.call(
+        "flood_fill",
+        sprite_id=sprite_id,
+        layer_id=layer_id,
+        frame=frame,
+        x=x,
+        y=y,
+        color=color,
+    )
+
+
+@mcp.tool()
+async def replace_color(
+    sprite_id: int,
+    layer_id: int,
+    frame: int,
+    from_color: str = Field(pattern=r"^#[0-9a-fA-F]{8}$", description="Source #RRGGBBAA"),
+    to_color: str = Field(pattern=r"^#[0-9a-fA-F]{8}$", description="Replacement #RRGGBBAA"),
+) -> dict:
+    """Replace all occurrences of from_color with to_color on the layer/frame as one undoable edit."""
+    return await bridge.call(
+        "replace_color",
+        sprite_id=sprite_id,
+        layer_id=layer_id,
+        frame=frame,
+        from_color=from_color,
+        to_color=to_color,
+    )
+
+
+@mcp.tool()
+async def sample_pixels(
+    sprite_id: int,
+    frame: int = 1,
+    layer_id: int = 0,
+    x: int = Field(default=0, ge=0, le=511),
+    y: int = Field(default=0, ge=0, le=511),
+    width: int = Field(default=16, ge=1, le=512),
+    height: int = Field(default=16, ge=1, le=512),
+) -> dict:
+    """Read exact #RRGGBBAA pixel colors and palette counts in a region.
+
+    If layer_id is 0, samples the composited visible sprite; otherwise samples that specific layer.
+    """
+    return await bridge.call(
+        "sample_pixels",
+        sprite_id=sprite_id,
+        frame=frame,
+        layer_id=layer_id,
+        x=x,
+        y=y,
+        width=width,
+        height=height,
+    )
+
+
+@mcp.tool()
 async def add_frame(sprite_id: int) -> dict:
     """Append a frame copied from the last frame, as one undoable edit."""
     return await bridge.call("add_frame", sprite_id=sprite_id)

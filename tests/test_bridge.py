@@ -142,7 +142,7 @@ class MCPTests(unittest.IsolatedAsyncioTestCase):
                     async with streamable_http_client(url, http_client=client) as (read, write, _):
                         async with ClientSession(read, write) as session:
                             await session.initialize()
-                            self.assertEqual(len((await session.list_tools()).tools), 6)
+                            self.assertEqual(len((await session.list_tools()).tools), 11)
                             result = await session.call_tool("inspect_sprite", {})
                             self.assertTrue(result.isError)  # No editor connected yet.
             await asyncio.gather(discover(), discover(), discover())
@@ -162,7 +162,9 @@ class MCPTests(unittest.IsolatedAsyncioTestCase):
                 await session.initialize()
                 tools = await session.list_tools()
                 self.assertEqual({t.name for t in tools.tools}, {
-                    "inspect_sprite", "create_sprite", "add_layer", "draw_pixels", "add_frame", "preview_sprite"})
+                    "inspect_sprite", "create_sprite", "add_layer", "draw_pixels",
+                    "fill_rect", "draw_line", "flood_fill", "replace_color", "sample_pixels",
+                    "add_frame", "preview_sprite"})
                 async with connect(f"ws://127.0.0.1:{port}") as peer:
                     await peer.send(json.dumps({"token": TOKEN}))
                     await peer.recv()
