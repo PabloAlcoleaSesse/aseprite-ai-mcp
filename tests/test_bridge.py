@@ -195,5 +195,33 @@ class MCPTests(unittest.IsolatedAsyncioTestCase):
                     self.assertTrue(result.isError)
 
 
+class InstallerTests(unittest.TestCase):
+    def test_platform_paths_macos_linux_windows(self):
+        from install import platform_paths, update_codex_toml
+
+        home = Path("/tmp/fake-home")
+        mac = platform_paths(home=home, system="Darwin", env={})
+        self.assertEqual(mac["extension"], home / "Library/Application Support/Aseprite/extensions/aseprite-ai-mcp")
+
+        linux = platform_paths(home=home, system="Linux", env={})
+        self.assertEqual(linux["extension"], home / ".config/aseprite/extensions/aseprite-ai-mcp")
+        self.assertEqual(linux["support"], home / ".local/share/aseprite-ai-mcp")
+
+        win = platform_paths(
+            home=home,
+            system="Windows",
+            env={"APPDATA": "/tmp/Roaming", "LOCALAPPDATA": "/tmp/Local"},
+        )
+        self.assertEqual(win["extension"], Path("/tmp/Roaming/Aseprite/extensions/aseprite-ai-mcp"))
+        self.assertEqual(win["support"], Path("/tmp/Local/Aseprite AI MCP"))
+
+        # Verify idempotent Codex TOML updates
+        first = update_codex_toml('model = "gpt-6"\n', "http://127.0.0.1:8766/mcp", "Bearer tok1")
+        second = update_codex_toml(first, "http://127.0.0.1:8766/mcp", "Bearer tok2")
+        self.assertEqual(second.count("[mcp_servers.aseprite]"), 1)
+        self.assertIn("Bearer tok2", second)
+
+
 if __name__ == "__main__":
     unittest.main()
+

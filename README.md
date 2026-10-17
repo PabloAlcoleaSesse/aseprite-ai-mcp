@@ -11,28 +11,31 @@ AI assistant(s) → MCP (stdio or shared local HTTP) → Python server
                                                   Aseprite Lua extension → live sprite
 ```
 
-## Quick setup on macOS (Codex, Claude Code, Antigravity)
+## One-command setup (macOS, Linux, Windows)
 
 Requires Python 3.10+ and an Aseprite build with Lua scripting and the
-[WebSocket API](https://www.aseprite.org/api/websocket).
-The source checkout here has these APIs (`./build/bin/aseprite`). Aseprite must be
+[WebSocket API](https://www.aseprite.org/api/websocket). Aseprite must be
 running in GUI mode for live editing.
 
-From this directory:
+### macOS & Linux
 
 ```sh
-python3 -m venv .venv
-.venv/bin/python -m pip install -r requirements.txt
-python3 package_extension.py
-.venv/bin/python install_macos.py
+git clone https://github.com/PabloAlcoleaSesse/aseprite-ai-mcp.git && cd aseprite-ai-mcp && python3 install.py
 ```
 
-`install_macos.py` performs a complete local installation:
+### Windows (PowerShell)
 
-1. Generates a random 32-byte token in `~/Library/Application Support/Aseprite AI MCP/connection.json` (`0600` permissions).
-2. Installs the extension into `~/Library/Application Support/Aseprite/extensions/aseprite-ai-mcp` with `autoconnect` enabled.
-3. Registers and starts a `launchd` agent (`local.aseprite.ai-mcp`) running `run_local.py`, which hosts the authenticated streamable HTTP MCP endpoint on `http://127.0.0.1:8766/mcp` and the Aseprite WebSocket listener on `ws://127.0.0.1:8765`.
-4. Configures **Codex** (`~/.codex/config.toml`), **Claude Code** (`~/.claude.json`), and **Antigravity** (`~/.gemini/config/mcp_config.json`) to connect to the shared local HTTP service (backing up existing config files before modifying them).
+```powershell
+git clone https://github.com/PabloAlcoleaSesse/aseprite-ai-mcp.git; cd aseprite-ai-mcp; py install.py
+```
+
+`install.py` performs the entire installation automatically in one step:
+
+1. Creates `.venv`, installs Python dependencies from `requirements.txt`, and builds `ai-mcp.aseprite-extension`.
+2. Generates a random 32-byte token in `connection.json` (`~/Library/Application Support/Aseprite AI MCP` on macOS, `~/.local/share/aseprite-ai-mcp` on Linux, `%LOCALAPPDATA%\Aseprite AI MCP` on Windows).
+3. Installs the extension (`extensions/aseprite-ai-mcp`) and quick-reconnect script (`scripts/Connect AI MCP.lua`) into your Aseprite config directory (`~/Library/Application Support/Aseprite` on macOS, `~/.config/aseprite` on Linux, `%APPDATA%\Aseprite` on Windows) with `autoconnect` enabled.
+4. Registers and starts the background service (`launchd` on macOS, `systemd --user` with background fallback on Linux, and `HKCU\...\Run` + detached `pythonw.exe` on Windows), hosting the authenticated streamable HTTP MCP endpoint on `http://127.0.0.1:8766/mcp` and the Aseprite WebSocket listener on `ws://127.0.0.1:8765`.
+5. Configures **Codex / ChatGPT** (`~/.codex/config.toml`), **Claude Code** (`~/.claude.json`), and **Antigravity** (`~/.gemini/config/mcp_config.json`) to connect to the shared local HTTP service (backing up existing config files before modifying them).
 
 When Aseprite starts in GUI mode, the extension automatically connects to the local bridge. If Aseprite was already open before installing, run **File → Scripts → Connect AI MCP** (or **File → Scripts → AI MCP Bridge** and click **Connect**).
 
